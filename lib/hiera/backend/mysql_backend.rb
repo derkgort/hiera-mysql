@@ -6,7 +6,7 @@ class Hiera
   module Backend
     class Mysql_backend
       def initialize
-        @use_jdbc = defined?(JRUBY_VERSION) ? true : false 
+        @use_jdbc = defined?(JRUBY_VERSION) ? true : false
         if @use_jdbc
           require 'jdbc/mysql'
           require 'java'
@@ -32,7 +32,7 @@ class Hiera
         answer = nil
 
         # Parse the mysql query from the config, we also pass in key
-        # to extra_data so this can be interpreted into the query 
+        # to extra_data so this can be interpreted into the query
         # string
         #
         queries = [ Config[:mysql][:query] ].flatten
@@ -49,6 +49,12 @@ class Hiera
               results.each do |ritem|
                 answer << Backend.parse_answer(ritem, scope)
               end
+            when :hash
+              answer ||= {}
+              results.each do |ritem|
+                parsed_result = parse_response(ritem)
+                answer = Backend.merge_answer(parsed_result, answer)
+              end
             else
               answer = Backend.parse_answer(results[0], scope)
               break
@@ -57,6 +63,37 @@ class Hiera
 
         end
         answer
+      end
+
+      def parse_response(answer)
+        return unless answer
+
+        format = Config[:mysql][:output] || 'plain'
+        Hiera.debug("[hiera-mysql]: Query returned data, parsing response as #{format}")
+
+        case format
+        when 'json'
+          parse_json answer
+        when 'yaml'
+          parse_yaml answer
+        else
+          answer
+        end
+      end
+
+      # Handlers
+      # Here we define specific handlers to parse the output of the http request
+      # and return its structured representation.  Currently we support YAML and JSON
+      #
+      def parse_json(answer)
+        require 'rubygems'
+        require 'json'
+        JSON.parse(answer)
+      end
+
+      def parse_yaml(answer)
+        require 'yaml'
+        YAML.load(answer)
       end
 
       def query (sql)
